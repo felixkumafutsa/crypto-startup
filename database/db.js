@@ -5,7 +5,7 @@ const logger = require('../utils/logger');
 
 dotenv.config();
 
-const dbPath = path.resolve(process.env.DATABASE_PATH || './database.sqlite');
+const dbPath = process.env.DATABASE_PATH || path.resolve(__dirname, '../database.sqlite');
 const db = new sqlite3.Database(dbPath);
 
 const initDb = () => {
