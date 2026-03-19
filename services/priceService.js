@@ -116,6 +116,52 @@ const fetchOKXPrice = async (symbol) => {
 };
 
 /**
+ * Fetches price from KuCoin
+ * @param {string} symbol (e.g., BTC-USDT)
+ * @returns {Promise<object|null>}
+ */
+const fetchKuCoinPrice = async (symbol) => {
+  try {
+    const kucoinSymbol = symbol.replace('USDT', '-USDT');
+    const response = await axiosInstance.get(`https://api.kucoin.com/api/v1/market/orderbook/level1?symbol=${kucoinSymbol}`);
+    if (!response.data?.data?.price) throw new Error('Invalid response format');
+    
+    const data = normalizeData('KuCoin', symbol, response.data.data.price);
+    logger.debug({ exchange: 'KuCoin', pair: symbol, price: data.price }, 'Price fetched');
+    return data;
+  } catch (error) {
+    logger.error({ 
+      err: error.message, 
+      exchange: 'KuCoin' 
+    }, 'Error fetching KuCoin price');
+    return null;
+  }
+};
+
+/**
+ * Fetches price from Gate.io
+ * @param {string} symbol (e.g., BTC_USDT)
+ * @returns {Promise<object|null>}
+ */
+const fetchGatePrice = async (symbol) => {
+  try {
+    const gateSymbol = symbol.replace('USDT', '_USDT');
+    const response = await axiosInstance.get(`https://api.gateio.ws/api/v4/spot/tickers?currency_pair=${gateSymbol}`);
+    if (!response.data?.[0]?.last) throw new Error('Invalid response format');
+    
+    const data = normalizeData('Gate.io', symbol, response.data[0].last);
+    logger.debug({ exchange: 'Gate.io', pair: symbol, price: data.price }, 'Price fetched');
+    return data;
+  } catch (error) {
+    logger.error({ 
+      err: error.message, 
+      exchange: 'Gate.io' 
+    }, 'Error fetching Gate.io price');
+    return null;
+  }
+};
+
+/**
  * Fetches prices from all supported exchanges
  * @param {string} symbol (e.g., BTCUSDT)
  * @returns {Promise<Array>}
@@ -124,7 +170,9 @@ const getAllPrices = async (symbol) => {
   const promises = [
     fetchBinancePrice(symbol),
     fetchBybitPrice(symbol),
-    fetchOKXPrice(symbol)
+    fetchOKXPrice(symbol),
+    fetchKuCoinPrice(symbol),
+    fetchGatePrice(symbol)
   ];
   const results = await Promise.all(promises);
   return results.filter(res => res !== null);

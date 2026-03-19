@@ -14,7 +14,7 @@ let latestPrices = {};
 
 // Configurable settings
 const THRESHOLD = parseFloat(process.env.ARBITRAGE_THRESHOLD || '1.5');
-const TRADING_PAIRS = ['BTCUSDT', 'ETHUSDT'];
+const TRADING_PAIRS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
 const FREE_ALERT_DELAY_MS = 1000; // 1 second for testing
 
 /**
