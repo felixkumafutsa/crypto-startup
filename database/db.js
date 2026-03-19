@@ -13,7 +13,8 @@ let pgPool;
 if (isProduction) {
   pgPool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: 10000, // 10 seconds timeout
   });
   logger.info('Using PostgreSQL database');
 } else {
