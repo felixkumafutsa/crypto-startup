@@ -1,5 +1,10 @@
 const express = require('express');
+const dns = require('dns');
 const dotenv = require('dotenv');
+
+// Force IPv4 for all network connections to fix Render/Supabase ENETUNREACH
+dns.setDefaultResultOrder('ipv4first');
+
 const logger = require('./utils/logger');
 
 const db = require('./database/db');
