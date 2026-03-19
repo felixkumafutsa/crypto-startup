@@ -13,10 +13,12 @@ let pgPool;
 if (isProduction) {
   pgPool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
-    connectionTimeoutMillis: 10000, // 10 seconds timeout
+    ssl: {
+      rejectUnauthorized: false
+    },
+    connectionTimeoutMillis: 10000,
   });
-  logger.info('Using PostgreSQL database');
+  logger.info('Using PostgreSQL database with SSL (rejectUnauthorized: false)');
 } else {
   const dbPath = process.env.DATABASE_PATH || path.resolve(__dirname, '../database.sqlite');
   db = new sqlite3.Database(dbPath);
