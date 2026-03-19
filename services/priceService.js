@@ -36,7 +36,9 @@ const fetchBinancePrice = async (symbol) => {
     const endpoints = [
       `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`,
       `https://api1.binance.com/api/v3/ticker/price?symbol=${symbol}`,
-      `https://api2.binance.com/api/v3/ticker/price?symbol=${symbol}`
+      `https://api2.binance.com/api/v3/ticker/price?symbol=${symbol}`,
+      `https://api3.binance.com/api/v3/ticker/price?symbol=${symbol}`,
+      `https://api.binance.us/api/v3/ticker/price?symbol=${symbol}` // Try US endpoint as fallback
     ];
     
     let lastError;
