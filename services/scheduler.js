@@ -21,16 +21,24 @@ const FREE_ALERT_DELAY_MS = 1000; // 1 second for testing
  * Main job function to run arbitrage checks
  */
 const runArbitrageCheck = async () => {
-  logger.info('Running arbitrage check...');
+  const threshold = parseFloat(process.env.ARBITRAGE_THRESHOLD || '1.5');
+  logger.info({ threshold }, 'Running arbitrage check...');
 
   for (const pair of TRADING_PAIRS) {
     try {
       const prices = await priceService.getAllPrices(pair);
+      logger.debug({ pair, count: prices.length }, 'Prices fetched for pair');
       
       // Update latest prices global store
       latestPrices[pair] = prices;
       
-      const opportunities = arbitrageEngine.findOpportunities(prices, THRESHOLD);
+      if (prices.length < 2) {
+        logger.warn({ pair }, 'Not enough prices to compare');
+        continue;
+      }
+
+      const opportunities = arbitrageEngine.findOpportunities(prices, threshold);
+      logger.info({ pair, opportunitiesFound: opportunities.length }, 'Arbitrage opportunities check complete');
 
       for (const opportunity of opportunities) {
         const cacheKey = `${opportunity.pair}_${opportunity.buyFrom}_${opportunity.sellTo}`;
@@ -66,14 +74,17 @@ const runArbitrageCheck = async () => {
  */
 const deliverAlerts = async (opportunity) => {
   logger.info({ pair: opportunity.pair, spread: opportunity.spread }, 'Delivering alerts to users/channels');
+  
   // 1. Send real-time to PRIVATE channel (for Premium)
   if (process.env.PRIVATE_CHANNEL_ID) {
+    logger.debug({ channelId: process.env.PRIVATE_CHANNEL_ID }, 'Sending alert to private channel');
     await bot.sendAlert(process.env.PRIVATE_CHANNEL_ID, opportunity);
   }
 
   // 2. Send real-time to individual PREMIUM users
   try {
     const premiumUsers = await db.all("SELECT telegram_id FROM users WHERE subscription_status = 'PREMIUM'");
+    logger.debug({ count: premiumUsers.length }, 'Sending alerts to premium users');
     for (const user of premiumUsers) {
       await bot.sendAlert(user.telegram_id, opportunity);
     }
@@ -83,6 +94,7 @@ const deliverAlerts = async (opportunity) => {
 
   // 3. Send delayed to PUBLIC channel (for Free)
   if (process.env.PUBLIC_CHANNEL_ID) {
+    logger.debug({ channelId: process.env.PUBLIC_CHANNEL_ID, delay: FREE_ALERT_DELAY_MS }, 'Scheduling alert for public channel');
     setTimeout(async () => {
       await bot.sendAlert(process.env.PUBLIC_CHANNEL_ID, opportunity);
     }, FREE_ALERT_DELAY_MS);
@@ -91,6 +103,7 @@ const deliverAlerts = async (opportunity) => {
   // 4. Send delayed to individual FREE users
   try {
     const freeUsers = await db.all("SELECT telegram_id FROM users WHERE subscription_status = 'FREE'");
+    logger.debug({ count: freeUsers.length, delay: FREE_ALERT_DELAY_MS }, 'Scheduling alerts for free users');
     for (const user of freeUsers) {
       setTimeout(async () => {
         logger.info({ userId: user.telegram_id, pair: opportunity.pair }, 'Sending alert to FREE user');

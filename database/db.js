@@ -98,57 +98,75 @@ const initDb = async () => {
 };
 
 const run = async (sql, params = []) => {
-  if (isProduction) {
-    // Convert ? to $1, $2, etc. for PostgreSQL
-    let pgSql = sql;
-    params.forEach((_, i) => {
-      pgSql = pgSql.replace('?', `$${i + 1}`);
-    });
-    const result = await pgPool.query(pgSql, params);
-    return { id: result.insertId, changes: result.rowCount };
-  } else {
-    return new Promise((resolve, reject) => {
-      db.run(sql, params, function (err) {
-        if (err) reject(err);
-        else resolve({ id: this.lastID, changes: this.changes });
+  try {
+    if (isProduction) {
+      // Convert ? to $1, $2, etc. for PostgreSQL
+      let pgSql = sql;
+      let count = 1;
+      while (pgSql.includes('?')) {
+        pgSql = pgSql.replace('?', `$${count++}`);
+      }
+      const result = await pgPool.query(pgSql, params);
+      return { id: null, changes: result.rowCount };
+    } else {
+      return new Promise((resolve, reject) => {
+        db.run(sql, params, function (err) {
+          if (err) reject(err);
+          else resolve({ id: this.lastID, changes: this.changes });
+        });
       });
-    });
+    }
+  } catch (err) {
+    logger.error({ err: err.message, sql, params }, 'Database run error');
+    throw err;
   }
 };
 
 const get = async (sql, params = []) => {
-  if (isProduction) {
-    let pgSql = sql;
-    params.forEach((_, i) => {
-      pgSql = pgSql.replace('?', `$${i + 1}`);
-    });
-    const result = await pgPool.query(pgSql, params);
-    return result.rows[0];
-  } else {
-    return new Promise((resolve, reject) => {
-      db.get(sql, params, (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
+  try {
+    if (isProduction) {
+      let pgSql = sql;
+      let count = 1;
+      while (pgSql.includes('?')) {
+        pgSql = pgSql.replace('?', `$${count++}`);
+      }
+      const result = await pgPool.query(pgSql, params);
+      return result.rows[0];
+    } else {
+      return new Promise((resolve, reject) => {
+        db.get(sql, params, (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
       });
-    });
+    }
+  } catch (err) {
+    logger.error({ err: err.message, sql, params }, 'Database get error');
+    throw err;
   }
 };
 
 const all = async (sql, params = []) => {
-  if (isProduction) {
-    let pgSql = sql;
-    params.forEach((_, i) => {
-      pgSql = pgSql.replace('?', `$${i + 1}`);
-    });
-    const result = await pgPool.query(pgSql, params);
-    return result.rows;
-  } else {
-    return new Promise((resolve, reject) => {
-      db.all(sql, params, (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
+  try {
+    if (isProduction) {
+      let pgSql = sql;
+      let count = 1;
+      while (pgSql.includes('?')) {
+        pgSql = pgSql.replace('?', `$${count++}`);
+      }
+      const result = await pgPool.query(pgSql, params);
+      return result.rows;
+    } else {
+      return new Promise((resolve, reject) => {
+        db.all(sql, params, (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
+        });
       });
-    });
+    }
+  } catch (err) {
+    logger.error({ err: err.message, sql, params }, 'Database all error');
+    throw err;
   }
 };
 

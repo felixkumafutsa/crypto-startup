@@ -193,12 +193,20 @@
                 // Fetch Alerts
                 const alertRes = await fetch('/api/alerts');
                 const alerts = await alertRes.json();
-                renderAlerts(alerts);
+                if (Array.isArray(alerts)) {
+                    renderAlerts(alerts);
+                } else {
+                    console.error('Alerts is not an array:', alerts);
+                }
 
                 // Fetch Users
                 const userRes = await fetch('/api/users');
                 const users = await userRes.json();
-                renderUsers(users);
+                if (Array.isArray(users)) {
+                    renderUsers(users);
+                } else {
+                    console.error('Users is not an array:', users);
+                }
 
             } catch (err) {
                 console.error('Failed to fetch dashboard data:', err);
