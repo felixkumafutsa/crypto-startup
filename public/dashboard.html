@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CryptoSpreadX - Member Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --primary: #3b82f6; --bg: #0f172a; --card: #1e293b; --text: #f8fafc; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg); color: var(--text); }
+        .card { background-color: var(--card); border: 1px solid #334155; }
+        .tier-free { background-color: #64748b; }
+        .tier-pro { background-color: #3b82f6; }
+        .tier-vip { background-color: #8b5cf6; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div id="login-screen" class="max-w-md mx-auto mt-20 text-center">
+        <h1 class="text-3xl font-bold mb-6">Welcome to CryptoSpreadX</h1>
+        <div class="card p-8 rounded-2xl">
+            <p class="text-slate-400 mb-6">Please enter your Telegram ID to access your dashboard.</p>
+            <input type="text" id="telegram-id-input" placeholder="e.g. 5480022583" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <button onclick="login()" class="w-full bg-blue-600 hover:bg-blue-700 font-bold py-3 rounded-xl transition-all">Access Dashboard</button>
+        </div>
+    </div>
+
+    <div id="dashboard-screen" class="max-w-6xl mx-auto hidden">
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-4">
+            <div>
+                <div class="flex items-center gap-3 mb-1">
+                    <h2 class="text-2xl font-bold" id="user-name">Username</h2>
+                    <span id="user-tier" class="px-3 py-0.5 rounded-full text-[10px] font-bold uppercase">Free</span>
+                </div>
+                <p class="text-slate-400 text-sm" id="subscription-status">Days remaining: 0</p>
+            </div>
+            <div id="upgrade-cta" class="hidden">
+                <a href="/subscribe/pro" class="bg-blue-600 hover:bg-blue-700 px-6 py-2.5 rounded-xl font-bold text-sm transition-all">🚀 Upgrade to PRO</a>
+            </div>
+        </header>
+
+        <!-- Stats Grid -->
+        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+            <div class="card p-6 rounded-2xl">
+                <p class="text-slate-400 text-xs mb-1 uppercase tracking-wider font-semibold">Signals Today</p>
+                <h3 id="stat-signals-today" class="text-2xl font-bold">0</h3>
+            </div>
+            <div class="card p-6 rounded-2xl">
+                <p class="text-slate-400 text-xs mb-1 uppercase tracking-wider font-semibold">Total Signals</p>
+                <h3 id="stat-total-signals" class="text-2xl font-bold">0</h3>
+            </div>
+            <div class="card p-6 rounded-2xl">
+                <p class="text-slate-400 text-xs mb-1 uppercase tracking-wider font-semibold">Avg. Spread</p>
+                <h3 id="stat-avg-spread" class="text-2xl font-bold text-blue-500">0%</h3>
+            </div>
+            <div class="card p-6 rounded-2xl">
+                <p class="text-slate-400 text-xs mb-1 uppercase tracking-wider font-semibold">Est. ROI (Net)</p>
+                <h3 id="stat-roi" class="text-2xl font-bold text-green-500">0%</h3>
+            </div>
+        </section>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Signals Table -->
+            <div class="lg:col-span-2">
+                <h3 class="text-lg font-bold mb-4">Recent Signals</h3>
+                <div class="card rounded-2xl overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead class="bg-slate-800/50 text-slate-400 text-xs uppercase">
+                            <tr>
+                                <th class="p-4">Time</th>
+                                <th class="p-4">Pair</th>
+                                <th class="p-4">Buy At</th>
+                                <th class="p-4">Sell At</th>
+                                <th class="p-4 text-right">Spread</th>
+                            </tr>
+                        </thead>
+                        <tbody id="signal-table-body" class="divide-y divide-slate-800"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Chart -->
+            <div class="lg:col-span-1">
+                <h3 class="text-lg font-bold mb-4">Top Pairs (7d)</h3>
+                <div class="card p-6 rounded-2xl h-[300px]">
+                    <canvas id="topPairsChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let myChart;
+
+        async function login() {
+            const id = document.getElementById('telegram-id-input').value;
+            if (!id) return alert('Enter your Telegram ID');
+            localStorage.setItem('telegramId', id);
+            loadDashboard();
+        }
+
+        async function loadDashboard() {
+            const id = localStorage.getItem('telegramId');
+            if (!id) return;
+
+            try {
+                const res = await fetch(`/api/me?telegramId=${id}`);
+                if (res.status === 404) {
+                    localStorage.removeItem('telegramId');
+                    document.getElementById('login-screen').classList.remove('hidden');
+                    document.getElementById('dashboard-screen').classList.add('hidden');
+                    return alert('User not found. Please start the bot first!');
+                }
+                const data = await res.json();
+
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('dashboard-screen').classList.remove('hidden');
+
+                // Update Header
+                document.getElementById('user-name').innerText = `@${data.user.username}`;
+                const tierEl = document.getElementById('user-tier');
+                tierEl.innerText = data.user.tier;
+                tierEl.className = `px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tier-${data.user.tier}`;
+                
+                if (data.user.tier === 'free') {
+                    document.getElementById('upgrade-cta').classList.remove('hidden');
+                    document.getElementById('upgrade-cta').querySelector('a').href = `/subscribe/pro?userId=${id}`;
+                }
+
+                const remaining = data.user.subscribed_until ? Math.ceil((new Date(data.user.subscribed_until) - new Date()) / (1000 * 60 * 60 * 24)) : 0;
+                document.getElementById('subscription-status').innerText = data.user.tier === 'free' ? 'Free Plan' : `Days remaining: ${remaining}`;
+
+                // Update Stats
+                document.getElementById('stat-signals-today').innerText = data.stats.signalsToday;
+                document.getElementById('stat-total-signals').innerText = data.stats.totalSignals;
+                document.getElementById('stat-avg-spread').innerText = `${data.stats.avgSpread}%`;
+                document.getElementById('stat-roi').innerText = `${data.stats.estimatedROI}%`;
+
+                fetchSignals();
+                fetchChart();
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function fetchSignals() {
+            const res = await fetch('/api/signals/recent');
+            const signals = await res.json();
+            const tbody = document.getElementById('signal-table-body');
+            tbody.innerHTML = signals.map(s => `
+                <tr class="hover:bg-slate-800/50 transition-colors">
+                    <td class="p-4 text-xs text-slate-500">${new Date(s.created_at).toLocaleTimeString()}</td>
+                    <td class="p-4 font-bold text-sm">${s.pair}</td>
+                    <td class="p-4 text-xs text-slate-400">${s.buy_exchange}</td>
+                    <td class="p-4 text-xs text-slate-400">${s.sell_exchange}</td>
+                    <td class="p-4 text-right text-green-500 font-bold">+${parseFloat(s.spread).toFixed(2)}%</td>
+                </tr>
+            `).join('');
+        }
+
+        async function fetchChart() {
+            const res = await fetch('/api/signals/top');
+            const data = await res.json();
+            
+            const ctx = document.getElementById('topPairsChart').getContext('2d');
+            if (myChart) myChart.destroy();
+            
+            myChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.map(d => d.pair),
+                    datasets: [{
+                        label: 'Avg Spread %',
+                        data: data.map(d => d.avg_spread),
+                        backgroundColor: '#3b82f6',
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: '#334155' } },
+                        x: { grid: { display: false } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        if (localStorage.getItem('telegramId')) loadDashboard();
+        setInterval(() => { if (localStorage.getItem('telegramId')) fetchSignals(); }, 60000);
+    </script>
+</body>
+</html>

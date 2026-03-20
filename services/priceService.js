@@ -164,25 +164,41 @@ const fetchGatePrice = async (symbol) => {
 };
 
 /**
- * Fetches prices from all supported exchanges
+ * Fetches prices from all supported exchanges and returns the best arbitrage opportunity.
  * @param {string} symbol (e.g., BTCUSDT)
- * @returns {Promise<Array>}
+ * @returns {Promise<Object|null>}
  */
-const getAllPrices = async (symbol) => {
-  const promises = [
-    fetchBinancePrice(symbol),
-    fetchBybitPrice(symbol),
-    fetchOKXPrice(symbol),
-    fetchKuCoinPrice(symbol),
-    fetchGatePrice(symbol)
-  ];
-  const results = await Promise.all(promises);
-  return results.filter(res => res !== null);
+const getBestOpportunity = async (symbol) => {
+  const prices = await getAllPrices(symbol);
+  if (prices.length < 2) return null;
+
+  let minPrice = prices[0];
+  let maxPrice = prices[0];
+
+  for (const p of prices) {
+    if (p.price < minPrice.price) minPrice = p;
+    if (p.price > maxPrice.price) maxPrice = p;
+  }
+
+  const spreadPercent = ((maxPrice.price - minPrice.price) / minPrice.price) * 100;
+
+  return {
+    pair: symbol,
+    buyExchange: minPrice.exchange,
+    buyPrice: minPrice.price,
+    sellExchange: maxPrice.exchange,
+    sellPrice: maxPrice.price,
+    spreadPercent: parseFloat(spreadPercent.toFixed(4)),
+    timestamp: Date.now()
+  };
 };
 
 module.exports = {
   getAllPrices,
+  getBestOpportunity,
   fetchBinancePrice,
   fetchBybitPrice,
-  fetchOKXPrice
+  fetchOKXPrice,
+  fetchKuCoinPrice,
+  fetchGatePrice
 };

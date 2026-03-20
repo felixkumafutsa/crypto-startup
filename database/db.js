@@ -1,169 +1,86 @@
-const sqlite3 = require('sqlite3').verbose();
 const { Pool } = require('pg');
-const path = require('path');
 const dotenv = require('dotenv');
 const logger = require('../utils/logger');
 
 dotenv.config();
 
-const isProduction = !!process.env.DATABASE_URL;
-let db;
-let pgPool;
+/**
+ * PostgreSQL connection pool
+ */
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+  connectionTimeoutMillis: 10000,
+});
 
-if (isProduction) {
-  pgPool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: {
-      rejectUnauthorized: false
-    },
-    connectionTimeoutMillis: 10000,
-  });
-  logger.info('Using PostgreSQL database with SSL (rejectUnauthorized: false)');
-} else {
-  const dbPath = process.env.DATABASE_PATH || path.resolve(__dirname, '../database.sqlite');
-  db = new sqlite3.Database(dbPath);
-  logger.info(`Using SQLite database at: ${dbPath}`);
-}
-
+/**
+ * Initialize database by running migrations.
+ */
 const initDb = async () => {
-  const createUsersTable = `
-    CREATE TABLE IF NOT EXISTS users (
-      id SERIAL PRIMARY KEY,
-      telegram_id TEXT UNIQUE NOT NULL,
-      username TEXT,
-      subscription_status TEXT DEFAULT 'FREE',
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-  `;
-
-  const createAlertsTable = `
-    CREATE TABLE IF NOT EXISTS alerts (
-      id SERIAL PRIMARY KEY,
-      pair TEXT NOT NULL,
-      spread REAL NOT NULL,
-      buy_from TEXT NOT NULL,
-      sell_to TEXT NOT NULL,
-      buy_price REAL,
-      sell_price REAL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-  `;
-
-  const createUsersTableSqlite = `
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      telegram_id TEXT UNIQUE NOT NULL,
-      username TEXT,
-      subscription_status TEXT DEFAULT 'FREE',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `;
-
-  const createAlertsTableSqlite = `
-    CREATE TABLE IF NOT EXISTS alerts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      pair TEXT NOT NULL,
-      spread REAL NOT NULL,
-      buy_from TEXT NOT NULL,
-      sell_to TEXT NOT NULL,
-      buy_price REAL,
-      sell_price REAL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `;
-
-  if (isProduction) {
-    await pgPool.query(createUsersTable);
-    await pgPool.query(createAlertsTable);
-  } else {
-    return new Promise((resolve, reject) => {
-      db.serialize(() => {
-        db.run(createUsersTableSqlite, (err) => {
-          if (err) {
-            logger.error({ err: err.message }, 'Error creating users table');
-            reject(err);
-          }
-        });
-        db.run(createAlertsTableSqlite, (err) => {
-          if (err) {
-            logger.error({ err: err.message }, 'Error creating alerts table');
-            reject(err);
-          } else {
-            resolve();
-          }
-        });
-      });
-    });
-  }
+  const migrate = require('./migrate');
+  await migrate();
 };
 
+/**
+ * Run a query that modifies the database (INSERT, UPDATE, DELETE).
+ * @param {string} sql 
+ * @param {Array} params 
+ * @returns {Promise<{id: number|null, changes: number}>}
+ */
 const run = async (sql, params = []) => {
   try {
-    if (isProduction) {
-      // Convert ? to $1, $2, etc. for PostgreSQL
-      let pgSql = sql;
-      let count = 1;
-      while (pgSql.includes('?')) {
-        pgSql = pgSql.replace('?', `$${count++}`);
-      }
-      const result = await pgPool.query(pgSql, params);
-      return { id: null, changes: result.rowCount };
-    } else {
-      return new Promise((resolve, reject) => {
-        db.run(sql, params, function (err) {
-          if (err) reject(err);
-          else resolve({ id: this.lastID, changes: this.changes });
-        });
-      });
+    // Convert ? to $1, $2, etc. for PostgreSQL
+    let pgSql = sql;
+    let count = 1;
+    while (pgSql.includes('?')) {
+      pgSql = pgSql.replace('?', `$${count++}`);
     }
+    const result = await pool.query(pgSql, params);
+    // Note: result.insertId is not a thing in pg, usually we use RETURNING id
+    const insertedId = result.rows[0]?.id || null;
+    return { id: insertedId, changes: result.rowCount };
   } catch (err) {
     logger.error({ err: err.message, sql, params }, 'Database run error');
     throw err;
   }
 };
 
+/**
+ * Fetch a single row from the database.
+ * @param {string} sql 
+ * @param {Array} params 
+ * @returns {Promise<Object|null>}
+ */
 const get = async (sql, params = []) => {
   try {
-    if (isProduction) {
-      let pgSql = sql;
-      let count = 1;
-      while (pgSql.includes('?')) {
-        pgSql = pgSql.replace('?', `$${count++}`);
-      }
-      const result = await pgPool.query(pgSql, params);
-      return result.rows[0];
-    } else {
-      return new Promise((resolve, reject) => {
-        db.get(sql, params, (err, row) => {
-          if (err) reject(err);
-          else resolve(row);
-        });
-      });
+    let pgSql = sql;
+    let count = 1;
+    while (pgSql.includes('?')) {
+      pgSql = pgSql.replace('?', `$${count++}`);
     }
+    const result = await pool.query(pgSql, params);
+    return result.rows[0] || null;
   } catch (err) {
     logger.error({ err: err.message, sql, params }, 'Database get error');
     throw err;
   }
 };
 
+/**
+ * Fetch all rows from the database.
+ * @param {string} sql 
+ * @param {Array} params 
+ * @returns {Promise<Array>}
+ */
 const all = async (sql, params = []) => {
   try {
-    if (isProduction) {
-      let pgSql = sql;
-      let count = 1;
-      while (pgSql.includes('?')) {
-        pgSql = pgSql.replace('?', `$${count++}`);
-      }
-      const result = await pgPool.query(pgSql, params);
-      return result.rows;
-    } else {
-      return new Promise((resolve, reject) => {
-        db.all(sql, params, (err, rows) => {
-          if (err) reject(err);
-          else resolve(rows);
-        });
-      });
+    let pgSql = sql;
+    let count = 1;
+    while (pgSql.includes('?')) {
+      pgSql = pgSql.replace('?', `$${count++}`);
     }
+    const result = await pool.query(pgSql, params);
+    return result.rows;
   } catch (err) {
     logger.error({ err: err.message, sql, params }, 'Database all error');
     throw err;
@@ -174,5 +91,6 @@ module.exports = {
   initDb,
   run,
   get,
-  all
+  all,
+  pool // Export pool if needed for direct access
 };
