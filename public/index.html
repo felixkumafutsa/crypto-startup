@@ -29,12 +29,18 @@
     <div id="dashboard-screen" class="max-w-6xl mx-auto hidden">
         <!-- Header -->
         <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 gap-4">
-            <div>
-                <div class="flex items-center gap-3 mb-1">
-                    <h2 class="text-2xl font-bold" id="user-name">Username</h2>
-                    <span id="user-tier" class="px-3 py-0.5 rounded-full text-[10px] font-bold uppercase">Free</span>
+            <div class="flex flex-col md:flex-row md:items-center gap-6">
+                <div>
+                    <div class="flex items-center gap-3 mb-1">
+                        <h2 class="text-2xl font-bold" id="user-name">Username</h2>
+                        <span id="user-tier" class="px-3 py-0.5 rounded-full text-[10px] font-bold uppercase">Free</span>
+                    </div>
+                    <p class="text-slate-400 text-sm" id="subscription-status">Days remaining: 0</p>
                 </div>
-                <p class="text-slate-400 text-sm" id="subscription-status">Days remaining: 0</p>
+                <button onclick="logout()" class="text-slate-400 hover:text-white text-sm flex items-center gap-2 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                    Logout
+                </button>
             </div>
             <div id="upgrade-cta" class="hidden">
                 <a href="/subscribe/pro" class="bg-blue-600 hover:bg-blue-700 px-6 py-2.5 rounded-xl font-bold text-sm transition-all">🚀 Upgrade to PRO</a>
@@ -101,22 +107,32 @@
             loadDashboard();
         }
 
+        function logout() {
+            localStorage.removeItem('telegramId');
+            document.getElementById('login-screen').classList.remove('hidden');
+            document.getElementById('dashboard-screen').classList.add('hidden');
+            if (myChart) myChart.destroy();
+        }
+
         async function loadDashboard() {
             const id = localStorage.getItem('telegramId');
             if (!id) return;
 
             try {
                 const res = await fetch(`/api/me?telegramId=${id}`);
-                if (res.status === 404) {
-                    localStorage.removeItem('telegramId');
-                    document.getElementById('login-screen').classList.remove('hidden');
-                    document.getElementById('dashboard-screen').classList.add('hidden');
-                    return alert('User not found. Please start the bot first!');
+                if (!res.ok) {
+                    logout();
+                    if (res.status === 404) alert('User not found. Please start the bot first!');
+                    return;
                 }
                 const data = await res.json();
-
-                document.getElementById('login-screen').classList.add('hidden');
-                document.getElementById('dashboard-screen').classList.remove('hidden');
+                
+                // Extra safety check for data.user
+                if (!data || !data.user) {
+                    console.error('Invalid user data received');
+                    logout();
+                    return;
+                }
 
                 // Update Header
                 document.getElementById('user-name').innerText = `@${data.user.username}`;
