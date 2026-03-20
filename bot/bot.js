@@ -284,8 +284,8 @@ const initBot = (token) => {
 const sendAlert = async (targetId, alert) => {
   if (!bot || !targetId) return;
 
-  // Sanitize targetId (remove whitespace and handle URLs)
-  let chatId = targetId.toString().trim();
+  // Sanitize targetId (remove whitespace, backticks, and handle URLs)
+  let chatId = targetId.toString().trim().replace(/[`"']/g, '');
   
   if (chatId.includes('t.me/')) {
     if (chatId.includes('t.me/+')) {
