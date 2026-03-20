@@ -126,6 +126,7 @@
                     return;
                 }
                 const data = await res.json();
+                console.log('User data loaded:', data);
                 
                 // Extra safety check for data.user
                 if (!data || !data.user) {
@@ -133,6 +134,9 @@
                     logout();
                     return;
                 }
+
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('dashboard-screen').classList.remove('hidden');
 
                 // Update Header
                 document.getElementById('user-name').innerText = `@${data.user.username}`;

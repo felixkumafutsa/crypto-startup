@@ -17,12 +17,15 @@ const THRESHOLD = parseFloat(process.env.ARBITRAGE_THRESHOLD || '1.5');
 const TRADING_PAIRS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
 const FREE_ALERT_DELAY_MS = 1000; // 1 second for testing
 
+// Alert spread threshold for sending to channels
+const CHANNEL_THRESHOLD = 0.01; // Low threshold for testing/monitoring
+
 /**
  * Main job function to run arbitrage checks
  * @param {boolean} isVipOnly If true, only send to VIP users
  */
 const runArbitrageCheck = async (isVipOnly = false) => {
-  const threshold = parseFloat(process.env.ARBITRAGE_THRESHOLD || '1.5');
+  const threshold = isVipOnly ? 0.01 : parseFloat(process.env.ARBITRAGE_THRESHOLD || '1.5');
   logger.info({ threshold, isVipOnly }, 'Running arbitrage check...');
 
   for (const pair of TRADING_PAIRS) {
@@ -35,7 +38,7 @@ const runArbitrageCheck = async (isVipOnly = false) => {
       
       if (!opportunity) continue;
 
-      if (opportunity.spreadPercent >= threshold) {
+      if (opportunity.spreadPercent >= threshold || opportunity.spreadPercent >= CHANNEL_THRESHOLD) {
         const cacheKey = `${opportunity.pair}_${opportunity.buyExchange}_${opportunity.sellExchange}`;
         
         // If already sent by ANY scheduler in the last 60s (alertCache TTL), skip
@@ -78,6 +81,8 @@ const deliverAlerts = async (opportunity, isVipOnly = false) => {
     const users = await db.all("SELECT * FROM users");
     const userAlerts = await db.all("SELECT * FROM user_alerts");
 
+    logger.info({ pair: opportunity.pair, isVipOnly }, 'Starting alert delivery...');
+
     for (const user of users) {
       if (isVipOnly && user.tier !== 'vip') continue;
 
@@ -101,12 +106,18 @@ const deliverAlerts = async (opportunity, isVipOnly = false) => {
 
     // Only send to channels if it's the standard scheduler
     if (!isVipOnly) {
-      if (process.env.PRIVATE_CHANNEL_ID) {
-        await bot.sendAlert(process.env.PRIVATE_CHANNEL_ID, opportunity);
+      const publicChannel = process.env.PUBLIC_CHANNEL_ID;
+      const privateChannel = process.env.PRIVATE_CHANNEL_ID;
+
+      logger.info({ publicChannel, privateChannel }, 'Sending to channels...');
+
+      if (privateChannel) {
+        await bot.sendAlert(privateChannel, opportunity);
       }
-      if (process.env.PUBLIC_CHANNEL_ID && opportunity.spread >= parseFloat(process.env.ARBITRAGE_THRESHOLD || '1.5')) {
+      
+      if (publicChannel && opportunity.spread >= CHANNEL_THRESHOLD) {
         setTimeout(async () => {
-          await bot.sendAlert(process.env.PUBLIC_CHANNEL_ID, opportunity);
+          await bot.sendAlert(publicChannel, opportunity);
         }, FREE_ALERT_DELAY_MS);
       }
     }
