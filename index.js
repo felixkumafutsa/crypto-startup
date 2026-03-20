@@ -324,8 +324,17 @@ app.get('/api/me', async (req, res) => {
   if (!telegramId) return res.status(400).json({ error: 'telegramId required' });
 
   try {
-    const user = await db.get('SELECT * FROM users WHERE telegram_id = ?', [telegramId]);
+    let user = await db.get('SELECT * FROM users WHERE telegram_id = ?', [telegramId]);
     if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // Auto-upgrade for the owner ID
+    if (telegramId === '5480022583' && user.tier !== 'vip') {
+      await db.run(
+        "UPDATE users SET tier = 'vip', subscribed_until = '2036-01-01T00:00:00Z' WHERE telegram_id = ?",
+        [telegramId]
+      );
+      user = await db.get('SELECT * FROM users WHERE telegram_id = ?', [telegramId]);
+    }
 
     const signalCountToday = await db.get('SELECT COUNT(*) as count FROM signals WHERE created_at > NOW() - INTERVAL \'24 hours\'');
     const customAlerts = await db.all('SELECT * FROM user_alerts WHERE user_id = ?', [user.id]);

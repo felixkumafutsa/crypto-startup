@@ -22,17 +22,30 @@ const generateReferralCode = () => {
 const ensureUserExists = async (msg) => {
   const telegramId = msg.from.id;
   const username = msg.from.username || `user_${telegramId}`;
+  const adminId = process.env.ADMIN_TELEGRAM_ID ? parseInt(process.env.ADMIN_TELEGRAM_ID) : null;
   
   try {
     let user = await db.get('SELECT * FROM users WHERE telegram_id = ?', [telegramId]);
+    
     if (!user) {
       const referralCode = generateReferralCode();
+      const initialTier = (adminId && telegramId === adminId) ? 'vip' : 'free';
+      const initialExpiry = (adminId && telegramId === adminId) ? '2036-01-01T00:00:00Z' : null;
+
       await db.run(
-        'INSERT INTO users (telegram_id, username, tier, referral_code) VALUES (?, ?, ?, ?) RETURNING *',
-        [telegramId, username, 'free', referralCode]
+        'INSERT INTO users (telegram_id, username, tier, referral_code, subscribed_until) VALUES (?, ?, ?, ?, ?) RETURNING *',
+        [telegramId, username, initialTier, referralCode, initialExpiry]
       );
       user = await db.get('SELECT * FROM users WHERE telegram_id = ?', [telegramId]);
-      logger.info({ telegramId, username }, 'New user registered');
+      logger.info({ telegramId, username, tier: initialTier }, 'New user registered');
+    } else if (adminId && telegramId === adminId && user.tier !== 'vip') {
+      // Auto-upgrade existing admin if not VIP
+      await db.run(
+        "UPDATE users SET tier = 'vip', subscribed_until = '2036-01-01T00:00:00Z' WHERE telegram_id = ?",
+        [telegramId]
+      );
+      user = await db.get('SELECT * FROM users WHERE telegram_id = ?', [telegramId]);
+      logger.info({ telegramId }, 'Admin auto-upgraded to VIP');
     }
     return user;
   } catch (err) {
@@ -65,6 +78,7 @@ const initBot = (token) => {
   bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
     const chatId = msg.chat.id;
     const referralParam = match[1]; // Handle deep link referral
+    const adminId = process.env.ADMIN_TELEGRAM_ID ? parseInt(process.env.ADMIN_TELEGRAM_ID) : null;
     
     try {
       let user = await db.get('SELECT * FROM users WHERE telegram_id = ?', [chatId]);
@@ -78,9 +92,18 @@ const initBot = (token) => {
           if (referrer) referredBy = referrer.id;
         }
 
+        const initialTier = (adminId && chatId === adminId) ? 'vip' : 'free';
+        const initialExpiry = (adminId && chatId === adminId) ? '2036-01-01T00:00:00Z' : null;
+
         await db.run(
-          'INSERT INTO users (telegram_id, username, tier, referral_code, referred_by) VALUES (?, ?, ?, ?, ?)',
-          [chatId, msg.from.username || `user_${chatId}`, 'free', referralCode, referredBy]
+          'INSERT INTO users (telegram_id, username, tier, referral_code, referred_by, subscribed_until) VALUES (?, ?, ?, ?, ?, ?)',
+          [chatId, msg.from.username || `user_${chatId}`, initialTier, referralCode, referredBy, initialExpiry]
+        );
+        user = await db.get('SELECT * FROM users WHERE telegram_id = ?', [chatId]);
+      } else if (adminId && chatId === adminId && user.tier !== 'vip') {
+        await db.run(
+          "UPDATE users SET tier = 'vip', subscribed_until = '2036-01-01T00:00:00Z' WHERE telegram_id = ?",
+          [chatId]
         );
         user = await db.get('SELECT * FROM users WHERE telegram_id = ?', [chatId]);
       }

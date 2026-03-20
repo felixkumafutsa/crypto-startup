@@ -130,7 +130,18 @@
                 }
 
                 const remaining = data.user.subscribed_until ? Math.ceil((new Date(data.user.subscribed_until) - new Date()) / (1000 * 60 * 60 * 24)) : 0;
-                document.getElementById('subscription-status').innerText = data.user.tier === 'free' ? 'Free Plan' : `Days remaining: ${remaining}`;
+                
+                let subscriptionText = 'Free Plan';
+                if (data.user.tier !== 'free') {
+                    if (remaining > 365) {
+                        subscriptionText = 'Lifetime Access';
+                    } else if (remaining <= 0) {
+                        subscriptionText = 'Subscription Expired';
+                    } else {
+                        subscriptionText = `Days remaining: ${remaining}`;
+                    }
+                }
+                document.getElementById('subscription-status').innerText = subscriptionText;
 
                 // Update Stats
                 document.getElementById('stat-signals-today').innerText = data.stats.signalsToday;
