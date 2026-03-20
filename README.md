@@ -59,8 +59,9 @@ A production-ready SaaS platform for crypto arbitrage signals.
 
 ## 📊 Dashboards
 
-- **Admin Panel**: `https://yourdomain.com/admin?token=YOUR_ADMIN_TOKEN`
-- **Member Dashboard**: `https://yourdomain.com/dashboard.html` (Login with Telegram ID)
+- **Member Dashboard (Home)**: `https://crypto-startup-o26i.onrender.com` (Login with Telegram ID)
+- **Admin Panel (Private)**: `https://crypto-startup-o26i.onrender.com/admin?token=YOUR_ADMIN_TOKEN`
+- **System Dashboard**: `https://crypto-startup-o26i.onrender.com/admin-dashboard.html`
 
 ## 🤝 Referral System
 
