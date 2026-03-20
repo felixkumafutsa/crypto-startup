@@ -71,11 +71,13 @@ app.get('/api/stats', async (req, res) => {
     const totalUsers = await db.get('SELECT COUNT(*) as count FROM users');
     const premiumUsers = await db.get("SELECT COUNT(*) as count FROM users WHERE tier IN ('pro', 'vip')");
     const totalAlerts = await db.get('SELECT COUNT(*) as count FROM signals');
+    const totalRevenue = await db.get("SELECT SUM(amount) as sum FROM payments WHERE status = 'confirmed'");
     
     res.json({
       totalUsers: totalUsers.count,
       premiumUsers: premiumUsers.count,
-      totalAlerts: totalAlerts.count
+      totalAlerts: totalAlerts.count,
+      totalRevenue: totalRevenue?.sum || 0
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch stats' });
@@ -373,7 +375,8 @@ app.get('/api/me', async (req, res) => {
         username: user.username || `user_${telegramId}`,
         tier: user.tier || 'free',
         subscribed_until: user.subscribed_until,
-        referral_code: user.referral_code
+        referral_code: user.referral_code,
+        isAdmin: tid.toString() === adminId
       },
       stats: {
         signalsToday: parseInt(signalCountToday?.count || 0),
