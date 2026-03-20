@@ -19,6 +19,11 @@ Task 3 completed:
 - Automated tier activation and referral bonuses on successful Paychangu payment.
 - Added support for both MWK and USD currencies.
 
+Deployment:
+- Updated environment variables for Render compatibility.
+- Pushed the latest stable version to GitHub (master branch).
+- Fixed `ReferenceError: getAllPrices is not defined` in `priceService.js`.
+
 Task 4 completed:
 - Extended `priceService.js` with KuCoin and Gate.io.
 - Implemented `getBestOpportunity` to compare prices across all 5 exchanges.
