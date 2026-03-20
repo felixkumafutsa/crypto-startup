@@ -32,20 +32,39 @@ const migrate = async () => {
     `);
     logger.info('Table "signals" checked/created.');
 
-    // 2. Users table (enhanced with tiers and referrals)
+    // 2. Users table (ensure columns exist for existing table)
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         telegram_id BIGINT UNIQUE NOT NULL,
         username VARCHAR(100),
-        tier VARCHAR(20) DEFAULT 'free',  -- free | pro | vip 
+        tier VARCHAR(20) DEFAULT 'free',
         subscribed_until TIMESTAMPTZ,
         referral_code VARCHAR(20) UNIQUE,
         referred_by INT REFERENCES users(id),
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
-    logger.info('Table "users" checked/created.');
+
+    // Ensure columns for existing users table
+    await client.query(`
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='tier') THEN
+          ALTER TABLE users ADD COLUMN tier VARCHAR(20) DEFAULT 'free';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='subscribed_until') THEN
+          ALTER TABLE users ADD COLUMN subscribed_until TIMESTAMPTZ;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='referral_code') THEN
+          ALTER TABLE users ADD COLUMN referral_code VARCHAR(20) UNIQUE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='referred_by') THEN
+          ALTER TABLE users ADD COLUMN referred_by INT REFERENCES users(id);
+        END IF;
+      END $$;
+    `);
+    logger.info('Table "users" checked/created/updated.');
 
     // 3. User Alerts table (for custom thresholds)
     await client.query(`

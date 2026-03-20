@@ -6,8 +6,17 @@ const FETCH_TIMEOUT = 8000; // Increased timeout
 const axiosInstance = axios.create({
   timeout: FETCH_TIMEOUT,
   headers: {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'application/json'
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+    'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+    'Sec-Ch-Ua-Mobile': '?0',
+    'Sec-Ch-Ua-Platform': '"Windows"',
+    'Sec-Fetch-Dest': 'empty',
+    'Sec-Fetch-Mode': 'cors',
+    'Sec-Fetch-Site': 'same-site'
   }
 });
 
@@ -71,23 +80,28 @@ const fetchBinancePrice = async (symbol) => {
  * @returns {Promise<object|null>}
  */
 const fetchBybitPrice = async (symbol) => {
-  try {
-    const response = await axiosInstance.get(`https://api.bybit.com/v5/market/tickers?category=spot&symbol=${symbol}`);
-    if (!response.data?.result?.list?.[0]) throw new Error('Invalid response format');
-    
-    const price = response.data.result.list[0].lastPrice;
-    const data = normalizeData('Bybit', symbol, price);
-    logger.debug({ exchange: 'Bybit', pair: symbol, price: data.price }, 'Price fetched');
-    return data;
-  } catch (error) {
-    logger.error({ 
-      err: error.message, 
-      code: error.code,
-      response: error.response?.status,
-      exchange: 'Bybit' 
-    }, 'Error fetching Bybit price');
-    return null;
+  const endpoints = [
+    `https://api.bybit.com/v5/market/tickers?category=spot&symbol=${symbol}`,
+    `https://api.bytick.com/v5/market/tickers?category=spot&symbol=${symbol}`,
+    `https://api-testnet.bybit.com/v5/market/tickers?category=spot&symbol=${symbol}`
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const response = await axiosInstance.get(url);
+      if (!response.data?.result?.list?.[0]) continue;
+      
+      const price = response.data.result.list[0].lastPrice;
+      const data = normalizeData('Bybit', symbol, price);
+      logger.debug({ exchange: 'Bybit', pair: symbol, price: data.price }, 'Price fetched');
+      return data;
+    } catch (error) {
+      logger.debug({ err: error.message, url }, 'Bybit endpoint failed');
+    }
   }
+  
+  logger.error({ exchange: 'Bybit', pair: symbol }, 'All Bybit endpoints failed');
+  return null;
 };
 
 /**
@@ -146,21 +160,37 @@ const fetchKuCoinPrice = async (symbol) => {
  * @returns {Promise<object|null>}
  */
 const fetchGatePrice = async (symbol) => {
-  try {
-    const gateSymbol = symbol.replace('USDT', '_USDT');
-    const response = await axiosInstance.get(`https://api.gateio.ws/api/v4/spot/tickers?currency_pair=${gateSymbol}`);
-    if (!response.data?.[0]?.last) throw new Error('Invalid response format');
-    
-    const data = normalizeData('Gate.io', symbol, response.data[0].last);
-    logger.debug({ exchange: 'Gate.io', pair: symbol, price: data.price }, 'Price fetched');
-    return data;
-  } catch (error) {
-    logger.error({ 
-      err: error.message, 
-      exchange: 'Gate.io' 
-    }, 'Error fetching Gate.io price');
-    return null;
+  const gateSymbol = symbol.replace('USDT', '_USDT');
+  const endpoints = [
+    `https://api.gateio.ws/api/v4/spot/tickers?currency_pair=${gateSymbol}`,
+    `https://data.gateapi.io/api2/1/ticker/${gateSymbol.toLowerCase()}`,
+    `https://api.gate.io/api2/1/ticker/${gateSymbol.toLowerCase()}`
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const response = await axiosInstance.get(url);
+      
+      // Handle different API versions
+      let price;
+      if (response.data?.[0]?.last) { // v4
+        price = response.data[0].last;
+      } else if (response.data?.last) { // v2
+        price = response.data.last;
+      }
+
+      if (price) {
+        const data = normalizeData('Gate.io', symbol, price);
+        logger.debug({ exchange: 'Gate.io', pair: symbol, price: data.price }, 'Price fetched');
+        return data;
+      }
+    } catch (error) {
+      logger.debug({ err: error.message, url }, 'Gate.io endpoint failed');
+    }
   }
+
+  logger.error({ exchange: 'Gate.io', pair: symbol }, 'All Gate.io endpoints failed');
+  return null;
 };
 
 /**

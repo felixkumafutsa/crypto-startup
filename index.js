@@ -65,7 +65,7 @@ app.get('/api/prices', (req, res) => {
 app.get('/api/stats', async (req, res) => {
   try {
     const totalUsers = await db.get('SELECT COUNT(*) as count FROM users');
-    const premiumUsers = await db.get("SELECT COUNT(*) as count FROM users WHERE tier IN ('pro', 'vip') OR subscription_status = 'PREMIUM'");
+    const premiumUsers = await db.get("SELECT COUNT(*) as count FROM users WHERE tier IN ('pro', 'vip')");
     const totalAlerts = await db.get('SELECT COUNT(*) as count FROM signals');
     
     res.json({

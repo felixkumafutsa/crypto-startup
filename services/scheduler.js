@@ -122,7 +122,7 @@ const initScheduler = () => {
   const cronInterval = process.env.CRON_INTERVAL || '15'; // default 15 seconds
   
   // Use node-cron to run every N seconds
-  cron.schedule(`*\/${cronInterval} * * * * *`, runArbitrageCheck);
+  cron.schedule(`*/${cronInterval} * * * * *`, () => runArbitrageCheck(false));
   logger.info(`Scheduler initialized with interval: ${cronInterval} seconds`);
 
   // VIP High-Frequency Scheduler (Task 9)
