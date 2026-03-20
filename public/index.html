@@ -22,7 +22,7 @@
         <div class="card p-8 rounded-2xl">
             <p class="text-slate-400 mb-6">Please enter your Telegram ID to access your dashboard.</p>
             <input type="text" id="telegram-id-input" placeholder="e.g. 5480022583" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <button onclick="login()" class="w-full bg-blue-600 hover:bg-blue-700 font-bold py-3 rounded-xl transition-all">Access Dashboard</button>
+            <button id="login-btn" onclick="login()" class="w-full bg-blue-600 hover:bg-blue-700 font-bold py-3 rounded-xl transition-all">Access Dashboard</button>
         </div>
     </div>
 
@@ -101,10 +101,19 @@
         let myChart;
 
         async function login() {
-            const id = document.getElementById('telegram-id-input').value;
+            const id = document.getElementById('telegram-id-input').value.trim();
             if (!id) return alert('Enter your Telegram ID');
+            
+            const btn = document.getElementById('login-btn');
+            const originalText = btn.innerText;
+            btn.innerText = 'Loading...';
+            btn.disabled = true;
+
             localStorage.setItem('telegramId', id);
-            loadDashboard();
+            await loadDashboard();
+            
+            btn.innerText = originalText;
+            btn.disabled = false;
         }
 
         function logout() {
@@ -118,15 +127,21 @@
             const id = localStorage.getItem('telegramId');
             if (!id) return;
 
+            console.log('Attempting to load dashboard for ID:', id);
+
             try {
                 const res = await fetch(`/api/me?telegramId=${id}`);
+                
                 if (!res.ok) {
+                    const errorData = await res.json();
+                    console.error('Login error:', errorData);
                     logout();
-                    if (res.status === 404) alert('User not found. Please start the bot first!');
+                    alert(errorData.error || 'User not found. Please start the bot first!');
                     return;
                 }
+
                 const data = await res.json();
-                console.log('User data loaded:', data);
+                console.log('Dashboard data loaded:', data);
                 
                 // Extra safety check for data.user
                 if (!data || !data.user) {

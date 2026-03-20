@@ -323,17 +323,28 @@ app.get('/api/me', async (req, res) => {
   const { telegramId } = req.query;
   if (!telegramId) return res.status(400).json({ error: 'telegramId required' });
 
+  logger.info({ telegramId }, 'Dashboard login attempt');
+
   try {
-    let user = await db.get('SELECT * FROM users WHERE telegram_id = ?', [telegramId]);
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    // Explicitly parse to number for BIGINT column compatibility
+    const tid = parseInt(telegramId);
+    if (isNaN(tid)) return res.status(400).json({ error: 'Invalid Telegram ID format' });
+
+    let user = await db.get('SELECT * FROM users WHERE telegram_id = ?', [tid]);
+    
+    if (!user) {
+      logger.warn({ telegramId: tid }, 'User not found in database during dashboard login');
+      return res.status(404).json({ error: 'User not found. Please start the bot first!' });
+    }
 
     // Auto-upgrade for the owner ID
-    if (telegramId === '5480022583' && user.tier !== 'vip') {
+    if (tid.toString() === '5480022583' && user.tier !== 'vip') {
+      logger.info({ telegramId: tid }, 'Auto-upgrading owner to VIP');
       await db.run(
         "UPDATE users SET tier = 'vip', subscribed_until = '2036-01-01T00:00:00Z' WHERE telegram_id = ?",
-        [telegramId]
+        [tid]
       );
-      user = await db.get('SELECT * FROM users WHERE telegram_id = ?', [telegramId]);
+      user = await db.get('SELECT * FROM users WHERE telegram_id = ?', [tid]);
     }
 
     const signalCountToday = await db.get('SELECT COUNT(*) as count FROM signals WHERE created_at > NOW() - INTERVAL \'24 hours\'');
@@ -342,23 +353,26 @@ app.get('/api/me', async (req, res) => {
     // Get analytics
     const stats = await analyticsService.getSignalStats(user.id);
 
+    logger.info({ telegramId, username: user.username }, 'Dashboard login successful');
+
     res.json({
       user: {
         id: user.id,
-        username: user.username,
-        tier: user.tier,
+        username: user.username || `user_${telegramId}`,
+        tier: user.tier || 'free',
         subscribed_until: user.subscribed_until,
         referral_code: user.referral_code
       },
       stats: {
-        signalsToday: signalCountToday.count,
+        signalsToday: parseInt(signalCountToday?.count || 0),
         totalSignals: stats.totalSignals,
         avgSpread: stats.avgSpread,
         estimatedROI: stats.estimatedROI
       },
-      alerts: customAlerts
+      alerts: customAlerts || []
     });
   } catch (error) {
+    logger.error({ err: error.message, stack: error.stack, telegramId }, 'Internal error in /api/me');
     res.status(500).json({ error: 'Internal server error' });
   }
 });
