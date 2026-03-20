@@ -43,8 +43,11 @@ A production-ready SaaS platform for crypto arbitrage signals.
    ADMIN_TOKEN=your_secure_admin_token
    ```
 
-3. **Database Migration**:
-   The application runs migrations automatically on startup via `database/migrate.js`.
+3. **Telegram Channel Configuration**:
+   The bot needs specific IDs to post alerts to your channels.
+   - **Public Channel**: Use the username format (e.g., `@SpreadX_public`) or the numeric ID.
+   - **Private Channel**: **MUST** use the numeric ID (e.g., `-100123456789`). Full links or join links (t.me/+) will NOT work.
+   - *How to get the ID*: Add the bot as an Admin to your channel, then forward a message from that channel to `@userinfobot` or `@get_id_bot`.
 
 4. **Paychangu Webhook Configuration**:
    - Get API keys from [https://in.paychangu.com/user/api](https://in.paychangu.com/user/api).

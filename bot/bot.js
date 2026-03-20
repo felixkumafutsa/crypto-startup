@@ -282,7 +282,23 @@ const initBot = (token) => {
  * @param {object} alert 
  */
 const sendAlert = async (targetId, alert) => {
-  if (!bot) return;
+  if (!bot || !targetId) return;
+
+  // Sanitize targetId (remove whitespace and handle URLs)
+  let chatId = targetId.toString().trim();
+  
+  if (chatId.includes('t.me/')) {
+    if (chatId.includes('t.me/+')) {
+      logger.warn({ targetId }, 'Cannot send alert to a private join link. Please use the numeric Channel ID (e.g., -100...) instead.');
+      return;
+    }
+    // Extract username from public link (e.g., https://t.me/SpreadX_public -> @SpreadX_public)
+    const username = chatId.split('t.me/')[1].split('/')[0];
+    chatId = `@${username}`;
+  } else if (isNaN(chatId) && !chatId.startsWith('@')) {
+    // If it's a string but not numeric and doesn't start with @, assume it's a username
+    chatId = `@${chatId}`;
+  }
 
   const message = `🚨 Arbitrage Opportunity\n\n` +
                   `Pair: ${alert.pair}\n` +
@@ -292,9 +308,9 @@ const sendAlert = async (targetId, alert) => {
                   `⏰ ${new Date(alert.timestamp).toLocaleTimeString()}`;
 
   try {
-    await bot.sendMessage(targetId, message);
+    await bot.sendMessage(chatId, message);
   } catch (error) {
-    logger.error({ err: error.message, targetId }, 'Error sending alert');
+    logger.error({ err: error.message, targetId, resolvedChatId: chatId }, 'Error sending alert');
   }
 };
 

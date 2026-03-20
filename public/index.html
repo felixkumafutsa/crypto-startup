@@ -146,7 +146,7 @@
                 
                 if (data.user.tier === 'free') {
                     document.getElementById('upgrade-cta').classList.remove('hidden');
-                    document.getElementById('upgrade-cta').querySelector('a').href = `/subscribe/pro?userId=${id}`;
+                    document.getElementById('upgrade-cta').querySelector('a').href = `/subscribe/pro?telegramId=${id}`;
                 }
 
                 const remaining = data.user.subscribed_until ? Math.ceil((new Date(data.user.subscribed_until) - new Date()) / (1000 * 60 * 60 * 24)) : 0;
@@ -177,48 +177,58 @@
         }
 
         async function fetchSignals() {
-            const res = await fetch('/api/signals/recent');
-            const signals = await res.json();
-            const tbody = document.getElementById('signal-table-body');
-            tbody.innerHTML = signals.map(s => `
-                <tr class="hover:bg-slate-800/50 transition-colors">
-                    <td class="p-4 text-xs text-slate-500">${new Date(s.created_at).toLocaleTimeString()}</td>
-                    <td class="p-4 font-bold text-sm">${s.pair}</td>
-                    <td class="p-4 text-xs text-slate-400">${s.buy_exchange}</td>
-                    <td class="p-4 text-xs text-slate-400">${s.sell_exchange}</td>
-                    <td class="p-4 text-right text-green-500 font-bold">+${parseFloat(s.spread).toFixed(2)}%</td>
-                </tr>
-            `).join('');
+            try {
+                const res = await fetch('/api/signals/recent');
+                if (!res.ok) throw new Error('Signals fetch failed');
+                const signals = await res.json();
+                const tbody = document.getElementById('signal-table-body');
+                tbody.innerHTML = signals.map(s => `
+                    <tr class="hover:bg-slate-800/50 transition-colors">
+                        <td class="p-4 text-xs text-slate-500">${new Date(s.created_at).toLocaleTimeString()}</td>
+                        <td class="p-4 font-bold text-sm">${s.pair}</td>
+                        <td class="p-4 text-xs text-slate-400">${s.buy_exchange}</td>
+                        <td class="p-4 text-xs text-slate-400">${s.sell_exchange}</td>
+                        <td class="p-4 text-right text-green-500 font-bold">+${parseFloat(s.spread).toFixed(2)}%</td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                console.error('Error fetching signals:', err);
+            }
         }
 
         async function fetchChart() {
-            const res = await fetch('/api/signals/top');
-            const data = await res.json();
-            
-            const ctx = document.getElementById('topPairsChart').getContext('2d');
-            if (myChart) myChart.destroy();
-            
-            myChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: data.map(d => d.pair),
-                    datasets: [{
-                        label: 'Avg Spread %',
-                        data: data.map(d => d.avg_spread),
-                        backgroundColor: '#3b82f6',
-                        borderRadius: 8
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: { beginAtZero: true, grid: { color: '#334155' } },
-                        x: { grid: { display: false } }
+            try {
+                const res = await fetch('/api/signals/top');
+                if (!res.ok) throw new Error('Chart data fetch failed');
+                const data = await res.json();
+                
+                const ctx = document.getElementById('topPairsChart').getContext('2d');
+                if (myChart) myChart.destroy();
+                
+                myChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.map(d => d.pair),
+                        datasets: [{
+                            label: 'Avg Spread %',
+                            data: data.map(d => d.avg_spread),
+                            backgroundColor: '#3b82f6',
+                            borderRadius: 8
+                        }]
                     },
-                    plugins: { legend: { display: false } }
-                }
-            });
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: { beginAtZero: true, grid: { color: '#334155' } },
+                            x: { grid: { display: false } }
+                        },
+                        plugins: { legend: { display: false } }
+                    }
+                });
+            } catch (err) {
+                console.error('Error fetching chart:', err);
+            }
         }
 
         if (localStorage.getItem('telegramId')) loadDashboard();
