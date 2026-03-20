@@ -156,18 +156,21 @@
                 // Update Header
                 document.getElementById('user-name').innerText = `@${data.user.username}`;
                 const tierEl = document.getElementById('user-tier');
-                tierEl.innerText = data.user.tier;
-                tierEl.className = `px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tier-${data.user.tier}`;
+                const userTier = data.user.tier || 'free';
+                tierEl.innerText = userTier;
+                tierEl.className = `px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tier-${userTier}`;
                 
-                if (data.user.tier === 'free') {
+                if (userTier === 'free') {
                     document.getElementById('upgrade-cta').classList.remove('hidden');
                     document.getElementById('upgrade-cta').querySelector('a').href = `/subscribe/pro?telegramId=${id}`;
+                } else {
+                    document.getElementById('upgrade-cta').classList.add('hidden');
                 }
 
                 const remaining = data.user.subscribed_until ? Math.ceil((new Date(data.user.subscribed_until) - new Date()) / (1000 * 60 * 60 * 24)) : 0;
                 
                 let subscriptionText = 'Free Plan';
-                if (data.user.tier !== 'free') {
+                if (userTier !== 'free') {
                     if (remaining > 365) {
                         subscriptionText = 'Lifetime Access';
                     } else if (remaining <= 0) {
@@ -179,10 +182,11 @@
                 document.getElementById('subscription-status').innerText = subscriptionText;
 
                 // Update Stats
-                document.getElementById('stat-signals-today').innerText = data.stats.signalsToday;
-                document.getElementById('stat-total-signals').innerText = data.stats.totalSignals;
-                document.getElementById('stat-avg-spread').innerText = `${data.stats.avgSpread}%`;
-                document.getElementById('stat-roi').innerText = `${data.stats.estimatedROI}%`;
+                const stats = data.stats || {};
+                document.getElementById('stat-signals-today').innerText = stats.signalsToday || 0;
+                document.getElementById('stat-total-signals').innerText = stats.totalSignals || 0;
+                document.getElementById('stat-avg-spread').innerText = `${stats.avgSpread || 0}%`;
+                document.getElementById('stat-roi').innerText = `${stats.estimatedROI || 0}%`;
 
                 fetchSignals();
                 fetchChart();

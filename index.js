@@ -11,6 +11,7 @@ const db = require('./database/db');
 const bot = require('./bot/bot');
 const scheduler = require('./services/scheduler');
 const paymentService = require('./services/paymentService');
+const analyticsService = require('./services/analyticsService');
 
 // Load environment variables
 dotenv.config();
@@ -18,6 +19,9 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 app.use(express.static('public'));
+
+// Favicon handler
+app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 // Simple logging middleware for express
 app.use((req, res, next) => {
@@ -338,7 +342,8 @@ app.get('/api/me', async (req, res) => {
     }
 
     // Auto-upgrade for the owner ID
-    if (tid.toString() === '5480022583' && user.tier !== 'vip') {
+    const adminId = process.env.ADMIN_TELEGRAM_ID || '5480022583';
+    if (tid.toString() === adminId && user.tier !== 'vip') {
       logger.info({ telegramId: tid }, 'Auto-upgrading owner to VIP');
       await db.run(
         "UPDATE users SET tier = 'vip', subscribed_until = '2036-01-01T00:00:00Z' WHERE telegram_id = ?",
@@ -351,7 +356,14 @@ app.get('/api/me', async (req, res) => {
     const customAlerts = await db.all('SELECT * FROM user_alerts WHERE user_id = ?', [user.id]);
     
     // Get analytics
-    const stats = await analyticsService.getSignalStats(user.id);
+    let stats = { totalSignals: 0, avgSpread: 0, bestSpread: 0, estimatedROI: 0 };
+    try {
+      if (analyticsService && typeof analyticsService.getSignalStats === 'function') {
+        stats = await analyticsService.getSignalStats(user.id);
+      }
+    } catch (analyticsError) {
+      logger.error({ err: analyticsError.message, userId: user.id }, 'Error fetching analytics for user');
+    }
 
     logger.info({ telegramId, username: user.username }, 'Dashboard login successful');
 
@@ -365,9 +377,9 @@ app.get('/api/me', async (req, res) => {
       },
       stats: {
         signalsToday: parseInt(signalCountToday?.count || 0),
-        totalSignals: stats.totalSignals,
-        avgSpread: stats.avgSpread,
-        estimatedROI: stats.estimatedROI
+        totalSignals: stats.totalSignals || 0,
+        avgSpread: stats.avgSpread || 0,
+        estimatedROI: stats.estimatedROI || 0
       },
       alerts: customAlerts || []
     });
@@ -396,9 +408,14 @@ app.get('/api/signals/recent', async (req, res) => {
  */
 app.get('/api/signals/top', async (req, res) => {
   try {
-    const top = await analyticsService.getTopPairs(7);
-    res.json(top);
+    if (analyticsService && typeof analyticsService.getTopPairs === 'function') {
+      const top = await analyticsService.getTopPairs(7);
+      res.json(top);
+    } else {
+      res.json([]);
+    }
   } catch (error) {
+    logger.error({ err: error.message }, 'Error in /api/signals/top');
     res.status(500).json({ error: 'Failed to fetch top pairs' });
   }
 });

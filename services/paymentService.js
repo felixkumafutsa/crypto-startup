@@ -18,11 +18,12 @@ const createCheckoutSession = async (user, tier, currency = 'MWK') => {
     const tx_ref = `ARBBOT-${user.id}-${tier.toUpperCase()}-${Date.now()}`;
     
     // Determine amount from env vars
-    const envVar = `${tier.toUpperCase()}_PRICE_${currency.toUpperCase()}`;
-    const amount = process.env[envVar];
+    const envVarLegacy = `${tier.toUpperCase()}_PRICE_${currency.toUpperCase()}`;
+    const envVarNew = `PAYCHANGU_${tier.toUpperCase()}_PRICE`;
+    const amount = process.env[envVarNew] || process.env[envVarLegacy];
     
     if (!amount) {
-      throw new Error(`Price for ${tier} in ${currency} not configured (${envVar})`);
+      throw new Error(`Price for ${tier} in ${currency} not configured (${envVarNew} or ${envVarLegacy})`);
     }
 
     const body = {
