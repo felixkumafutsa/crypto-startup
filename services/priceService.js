@@ -164,6 +164,29 @@ const fetchGatePrice = async (symbol) => {
 };
 
 /**
+ * Fetches prices from all supported exchanges
+ * @param {string} symbol (e.g., BTCUSDT)
+ * @returns {Promise<Array>}
+ */
+const getAllPrices = async (symbol) => {
+  try {
+    const fetchers = [
+      fetchBinancePrice(symbol),
+      fetchBybitPrice(symbol),
+      fetchOKXPrice(symbol),
+      fetchKuCoinPrice(symbol),
+      fetchGatePrice(symbol)
+    ];
+
+    const results = await Promise.all(fetchers);
+    return results.filter(p => p !== null);
+  } catch (error) {
+    logger.error({ err: error.message, symbol }, 'Error in getAllPrices');
+    return [];
+  }
+};
+
+/**
  * Fetches prices from all supported exchanges and returns the best arbitrage opportunity.
  * @param {string} symbol (e.g., BTCUSDT)
  * @returns {Promise<Object|null>}
