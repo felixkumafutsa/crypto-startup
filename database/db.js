@@ -1,19 +1,14 @@
-const { Pool } = require('pg');
-const dotenv = require('dotenv');
+const path = require('path');
+const sqlite3 = require('sqlite3').verbose();
 const logger = require('../utils/logger');
 
-dotenv.config();
-
-/**
- * PostgreSQL connection pool
- */
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
-  connectionTimeoutMillis: 10000,
-  max: 20, // Increased for Render stability
-  idleTimeoutMillis: 30000,
-  allowExitOnIdle: true
+const dbPath = path.resolve(__dirname, '../database.sqlite');
+const db = new sqlite3.Database(dbPath, (err) => {
+  if (err) {
+    logger.error({ err: err.message }, 'Could not connect to database');
+  } else {
+    logger.info('Connected to SQLite database');
+  }
 });
 
 /**
@@ -24,76 +19,38 @@ const initDb = async () => {
   await migrate();
 };
 
-/**
- * Run a query that modifies the database (INSERT, UPDATE, DELETE).
- * @param {string} sql 
- * @param {Array} params 
- * @returns {Promise<{id: number|null, changes: number}>}
- */
-const run = async (sql, params = []) => {
-  try {
-    // Convert ? to $1, $2, etc. for PostgreSQL
-    let pgSql = sql;
-    let count = 1;
-    while (pgSql.includes('?')) {
-      pgSql = pgSql.replace('?', `$${count++}`);
-    }
-    const result = await pool.query(pgSql, params);
-    // Note: result.insertId is not a thing in pg, usually we use RETURNING id
-    const insertedId = result.rows[0]?.id || null;
-    return { id: insertedId, changes: result.rowCount };
-  } catch (err) {
-    logger.error({ err: err.message, sql, params }, 'Database run error');
-    throw err;
-  }
+const run = (sql, params = []) => {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function (err) {
+      if (err) reject(err);
+      else resolve({ id: this.lastID, changes: this.changes });
+    });
+  });
 };
 
-/**
- * Fetch a single row from the database.
- * @param {string} sql 
- * @param {Array} params 
- * @returns {Promise<Object|null>}
- */
-const get = async (sql, params = []) => {
-  try {
-    let pgSql = sql;
-    let count = 1;
-    while (pgSql.includes('?')) {
-      pgSql = pgSql.replace('?', `$${count++}`);
-    }
-    const result = await pool.query(pgSql, params);
-    return result.rows[0] || null;
-  } catch (err) {
-    logger.error({ err: err.message, sql, params }, 'Database get error');
-    throw err;
-  }
+const get = (sql, params = []) => {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => {
+      if (err) reject(err);
+      else resolve(row);
+    });
+  });
 };
 
-/**
- * Fetch all rows from the database.
- * @param {string} sql 
- * @param {Array} params 
- * @returns {Promise<Array>}
- */
-const all = async (sql, params = []) => {
-  try {
-    let pgSql = sql;
-    let count = 1;
-    while (pgSql.includes('?')) {
-      pgSql = pgSql.replace('?', `$${count++}`);
-    }
-    const result = await pool.query(pgSql, params);
-    return result.rows;
-  } catch (err) {
-    logger.error({ err: err.message, sql, params }, 'Database all error');
-    throw err;
-  }
+const all = (sql, params = []) => {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => {
+      if (err) reject(err);
+      else resolve(rows);
+    });
+  });
 };
 
 module.exports = {
+  db,
   initDb,
   run,
   get,
   all,
-  pool // Export pool if needed for direct access
+  isProduction: process.env.NODE_ENV === 'production'
 };

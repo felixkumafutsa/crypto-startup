@@ -17,13 +17,20 @@ const createCheckoutSession = async (user, tier, currency = 'MWK') => {
   try {
     const tx_ref = `ARBBOT-${user.id}-${tier.toUpperCase()}-${Date.now()}`;
     
-    // Determine amount from env vars
-    const envVarLegacy = `${tier.toUpperCase()}_PRICE_${currency.toUpperCase()}`;
-    const envVarNew = `PAYCHANGU_${tier.toUpperCase()}_PRICE`;
-    const amount = process.env[envVarNew] || process.env[envVarLegacy];
+    // Determine amount from DB settings first
+    const key = `${tier.toUpperCase()}_PRICE_${currency.toUpperCase()}`;
+    const setting = await db.get('SELECT value FROM settings WHERE key = ?', [key]);
+    let amount = setting ? setting.value : null;
+    
+    // Fallback to env vars if not set in DB
+    if (!amount) {
+      const envVarLegacy = `${tier.toUpperCase()}_PRICE_${currency.toUpperCase()}`;
+      const envVarNew = `PAYCHANGU_${tier.toUpperCase()}_PRICE`;
+      amount = process.env[envVarNew] || process.env[envVarLegacy];
+    }
     
     if (!amount) {
-      throw new Error(`Price for ${tier} in ${currency} not configured (${envVarNew} or ${envVarLegacy})`);
+      throw new Error(`Price for ${tier} in ${currency} not configured`);
     }
 
     const body = {
@@ -136,13 +143,13 @@ const activateSubscription = async (tx_ref) => {
 
     // Update payment
     await db.run(
-      'UPDATE payments SET status = ?, updated_at = NOW() WHERE tx_ref = ?',
+      'UPDATE payments SET status = ?, updated_at = datetime(\'now\') WHERE tx_ref = ?',
       ['confirmed', tx_ref]
     );
 
     // Update user
     await db.run(
-      "UPDATE users SET tier = ?, subscribed_until = NOW() + INTERVAL '30 days' WHERE id = ?",
+      "UPDATE users SET tier = ?, subscribed_until = datetime('now', '+30 days') WHERE id = ?",
       [tier, payment.user_id]
     );
 
@@ -185,7 +192,7 @@ const handleWebhook = async (rawBody, signatureHeader) => {
       const tx_ref = data.tx_ref || data.reference;
       if (tx_ref) {
         await db.run(
-          'UPDATE payments SET status = ?, updated_at = NOW() WHERE tx_ref = ?',
+          'UPDATE payments SET status = ?, updated_at = datetime(\'now\') WHERE tx_ref = ?',
           ['failed', tx_ref]
         );
       }

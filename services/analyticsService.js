@@ -9,20 +9,29 @@ const logger = require('../utils/logger');
  */
 const getSignalStats = async (userId = null, days = 30) => {
   try {
-    // Note: In Task 2, we didn't add a 'received_signals' join table,
-    // so we'll calculate stats based on global signals table for now.
-    // In a real app, you'd track which signals each user actually received.
-    
-    const query = `
+    let query = `
       SELECT 
         COUNT(*) as total_signals,
         AVG(spread) as avg_spread,
         MAX(spread) as best_spread
-      FROM signals 
-      WHERE created_at > NOW() - INTERVAL '${days} days'
+      FROM signals s
     `;
-    
-    const stats = await db.get(query);
+
+    let params = [days];
+
+    if (userId) {
+      query += `
+        INNER JOIN received_signals rs ON s.id = rs.signal_id
+        WHERE rs.user_id = ? AND s.created_at > datetime('now', '-' || ? || ' days')
+      `;
+      params.unshift(userId); // Add userId to the beginning of the params array
+    } else {
+      query += `
+      WHERE created_at > datetime('now', '-' || ? || ' days')
+      `;
+    }
+
+    const stats = await db.get(query, params);
     
     const total = parseInt(stats.total_signals || 0);
     const avgSpread = parseFloat(stats.avg_spread || 0);
@@ -38,7 +47,7 @@ const getSignalStats = async (userId = null, days = 30) => {
       bestSpread: bestSpread.toFixed(2),
       estimatedROI: estimatedROI.toFixed(2)
     };
-  } catch (err) {
+  } catch (err) {    
     logger.error({ err: err.message }, 'Error getting signal stats');
     return { totalSignals: 0, avgSpread: 0, bestSpread: 0, estimatedROI: 0 };
   }
@@ -56,12 +65,12 @@ const getTopPairs = async (days = 7) => {
         pair, 
         AVG(spread) as avg_spread 
       FROM signals 
-      WHERE created_at > NOW() - INTERVAL '${days} days'
+      WHERE created_at > datetime('now', '-' || ? || ' days')
       GROUP BY pair
       ORDER BY avg_spread DESC
       LIMIT 5
     `;
-    return await db.all(query);
+    return await db.all(query, [days]);
   } catch (err) {
     logger.error({ err: err.message }, 'Error getting top pairs');
     return [];

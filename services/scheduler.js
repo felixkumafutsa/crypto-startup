@@ -151,7 +151,7 @@ const initScheduler = () => {
     logger.info('Running daily subscription expiry check...');
     try {
       const expiredUsers = await db.all(
-        "SELECT * FROM users WHERE subscribed_until < NOW() AND tier != 'free'"
+        "SELECT * FROM users WHERE subscribed_until < datetime('now') AND tier != 'free'"
       );
 
       for (const user of expiredUsers) {

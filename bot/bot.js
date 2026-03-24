@@ -135,7 +135,7 @@ const initBot = (token) => {
       const expiry = user.subscribed_until ? new Date(user.subscribed_until).toLocaleDateString() : 'Never';
       
       // Simple count of signals for this user
-      const signalCount = await db.get('SELECT COUNT(*) as count FROM signals WHERE created_at > NOW() - INTERVAL \'30 days\'');
+      const signalCount = await db.get("SELECT COUNT(*) as count FROM signals WHERE created_at > datetime('now', '-30 days')");
 
       // Fetch last payment
       const lastPayment = await db.get('SELECT * FROM payments WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [user.id]);
