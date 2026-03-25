@@ -27,17 +27,31 @@ const migrate = async () => {
       db.run(`
         CREATE TABLE IF NOT EXISTS users (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          telegram_id INTEGER UNIQUE NOT NULL,
+          telegram_id INTEGER UNIQUE,
           username TEXT,
           tier TEXT DEFAULT 'free',
           subscribed_until TEXT,
           referral_code TEXT UNIQUE,
           referred_by INTEGER REFERENCES users(id),
+          email TEXT UNIQUE,
+          phone TEXT UNIQUE,
+          otp_code TEXT,
+          otp_expires_at TEXT,
+          is_verified INTEGER DEFAULT 0,
+          session_token TEXT UNIQUE,
           created_at TEXT DEFAULT (datetime('now'))
         );
       `, (err) => {
         if (err) return reject(err);
         logger.info('Table "users" checked/created.');
+        
+        // Fail-safe alters for existing databases (ignores errors if columns already exist)
+        db.run("ALTER TABLE users ADD COLUMN email TEXT UNIQUE", () => {});
+        db.run("ALTER TABLE users ADD COLUMN phone TEXT UNIQUE", () => {});
+        db.run("ALTER TABLE users ADD COLUMN otp_code TEXT", () => {});
+        db.run("ALTER TABLE users ADD COLUMN otp_expires_at TEXT", () => {});
+        db.run("ALTER TABLE users ADD COLUMN is_verified INTEGER DEFAULT 0", () => {});
+        db.run("ALTER TABLE users ADD COLUMN session_token TEXT UNIQUE", () => {});
       });
 
       // 3. User Alerts table
@@ -70,6 +84,8 @@ const migrate = async () => {
       `, (err) => {
         if (err) return reject(err);
         logger.info('Table "payments" checked/created.');
+      });
+
       // 5. Settings table
       db.run(`
         CREATE TABLE IF NOT EXISTS settings (

@@ -32,6 +32,79 @@ app.use((req, res, next) => {
 
 const PORT = process.env.PORT || 3000;
 
+const crypto = require('crypto');
+const { sendOTP } = require('./services/notificationService');
+
+/**
+ * Route: Request OTP
+ * POST /api/auth/request-otp
+ */
+app.post('/api/auth/request-otp', async (req, res) => {
+  const { identifier, type } = req.body; // type is 'email' or 'phone'
+  if (!identifier || !type) return res.status(400).json({ error: 'Missing parameters' });
+
+  try {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 15 * 60000).toISOString();
+
+    const column = type === 'email' ? 'email' : 'phone';
+    let user = await db.get(`SELECT * FROM users WHERE ${column} = ?`, [identifier]);
+
+    if (!user) {
+      // Create new user with fake telegram_id to bypass NOT NULL constraints on older migrating DBs
+      const fakeTelegramId = -Math.floor(Date.now() + Math.random() * 100000);
+      await db.run(
+        `INSERT INTO users (telegram_id, ${column}, otp_code, otp_expires_at) VALUES (?, ?, ?, ?)`,
+        [fakeTelegramId, identifier, code, expiresAt]
+      );
+    } else {
+      await db.run(
+        `UPDATE users SET otp_code = ?, otp_expires_at = ? WHERE id = ?`,
+        [code, expiresAt, user.id]
+      );
+    }
+
+    await sendOTP(identifier, type, code);
+    res.json({ success: true, message: 'OTP sent successfully' });
+  } catch (err) {
+    logger.error({ err: err.message }, 'Request OTP error');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * Route: Verify OTP
+ * POST /api/auth/verify-otp
+ */
+app.post('/api/auth/verify-otp', async (req, res) => {
+  const { identifier, type, code } = req.body;
+  
+  try {
+    const column = type === 'email' ? 'email' : 'phone';
+    const user = await db.get(`SELECT * FROM users WHERE ${column} = ?`, [identifier]);
+
+    if (!user || user.otp_code !== code) {
+      return res.status(401).json({ error: 'Invalid or expired OTP' });
+    }
+
+    if (new Date(user.otp_expires_at) < new Date()) {
+      return res.status(401).json({ error: 'OTP has expired' });
+    }
+
+    const sessionToken = crypto.randomBytes(32).toString('hex');
+
+    await db.run(
+      `UPDATE users SET otp_code = NULL, otp_expires_at = NULL, is_verified = 1, session_token = ? WHERE id = ?`,
+      [sessionToken, user.id]
+    );
+
+    res.json({ success: true, token: sessionToken, user: { id: user.id, tier: user.tier } });
+  } catch (err) {
+    logger.error({ err: err.message }, 'Verify OTP error');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 /**
  * Admin API: Upgrade user to PREMIUM
  * POST /admin/upgrade
@@ -115,20 +188,26 @@ app.get('/api/users', async (req, res) => {
  */
 app.get('/subscribe/:tier', async (req, res) => {
   const { tier } = req.params;
-  const { telegramId, currency = 'MWK' } = req.query;
+  const { telegramId, sessionToken, currency = 'MWK' } = req.query;
 
   if (!['pro', 'vip'].includes(tier)) {
     return res.status(400).send('Invalid tier');
   }
 
-  if (!telegramId) {
-    return res.status(400).json({ error: 'telegramId required' });
+  if (!telegramId && !sessionToken) {
+    return res.status(400).json({ error: 'telegramId or sessionToken required' });
   }
 
   try {
-    const user = await db.get('SELECT * FROM users WHERE telegram_id = ?', [telegramId]);
+    let user;
+    if (sessionToken) {
+      user = await db.get('SELECT * FROM users WHERE session_token = ?', [sessionToken]);
+    } else {
+      user = await db.get('SELECT * FROM users WHERE telegram_id = ?', [telegramId]);
+    }
+
     if (!user) {
-      return res.status(404).json({ error: 'User not found. Send /start to the bot first.' });
+      return res.status(404).json({ error: 'User not found. Send /start to the bot or register first.' });
     }
 
     const checkoutUrl = await paymentService.createCheckoutSession(user, tier, currency);
@@ -572,24 +651,32 @@ app.get('/admin/payments', async (req, res) => {
 
 /**
  * API: Get user data for member dashboard
- * GET /api/me?telegramId=...
+ * GET /api/me?telegramId=... or ?sessionToken=...
  */
 app.get('/api/me', async (req, res) => {
-  const { telegramId } = req.query;
-  if (!telegramId) return res.status(400).json({ error: 'telegramId required' });
+  const { telegramId, sessionToken } = req.query;
+  
+  if (!telegramId && !sessionToken) {
+    return res.status(400).json({ error: 'telegramId or sessionToken required' });
+  }
 
-  logger.info({ telegramId }, 'Dashboard login attempt');
+  logger.info({ telegramId, sessionToken }, 'Dashboard login attempt');
 
   try {
-    // Explicitly parse to number for BIGINT column compatibility
-    const tid = parseInt(telegramId);
-    if (isNaN(tid)) return res.status(400).json({ error: 'Invalid Telegram ID format' });
+    let user;
+    let tid = null;
 
-    let user = await db.get('SELECT * FROM users WHERE telegram_id = ?', [tid]);
+    if (sessionToken) {
+      user = await db.get('SELECT * FROM users WHERE session_token = ?', [sessionToken]);
+    } else {
+      tid = parseInt(telegramId);
+      if (isNaN(tid)) return res.status(400).json({ error: 'Invalid Telegram ID format' });
+      user = await db.get('SELECT * FROM users WHERE telegram_id = ?', [tid]);
+    }
     
     if (!user) {
-      logger.warn({ telegramId: tid }, 'User not found in database during dashboard login');
-      return res.status(404).json({ error: 'User not found. Please start the bot first!' });
+      logger.warn({ telegramId: tid, sessionToken }, 'User not found in database during dashboard login');
+      return res.status(404).json({ error: 'User not found. Please register or start the bot first!' });
     }
 
     // Auto-upgrade for the owner ID

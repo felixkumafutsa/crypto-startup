@@ -24,10 +24,33 @@
     <div id="login-screen" class="fixed inset-0 z-50 flex items-center justify-center bg-[#0f172a] p-4">
         <div class="max-w-md w-full text-center">
             <h1 class="text-3xl font-bold mb-6">Welcome to CryptoSpreadX</h1>
-            <div class="card p-8 rounded-2xl">
-                <p class="text-slate-400 mb-6">Please enter your Telegram ID to access your dashboard.</p>
-                <input type="text" id="telegram-id-input" placeholder="e.g. 5480022583" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500 text-white">
-                <button id="login-btn" onclick="login()" class="w-full bg-blue-600 hover:bg-blue-700 font-bold py-3 rounded-xl transition-all">Access Dashboard</button>
+            
+            <div id="step-1" class="card p-8 rounded-2xl">
+                <p class="text-slate-400 mb-6">Enter your Phone/Email, or Telegram ID.</p>
+                <div class="flex gap-2 mb-4">
+                    <button id="type-email" onclick="setLoginType('email')" class="flex-1 py-2 text-sm font-bold bg-blue-600 rounded-lg transition-all">Email/Phone</button>
+                    <button id="type-tg" onclick="setLoginType('tg')" class="flex-1 py-2 text-sm font-bold bg-slate-800 text-slate-400 rounded-lg transition-all">Telegram ID</button>
+                </div>
+                
+                <!-- Email/Phone Input -->
+                <div id="input-container-email">
+                    <input type="text" id="identifier-input" placeholder="e.g. user@example.com" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500 text-white">
+                    <button id="request-otp-btn" onclick="requestOTP()" class="w-full bg-blue-600 hover:bg-blue-700 font-bold py-3 rounded-xl transition-all">Send OTP Code</button>
+                </div>
+
+                <!-- Telegram ID Input -->
+                <div id="input-container-tg" class="hidden">
+                    <input type="text" id="telegram-id-input" placeholder="e.g. 5480022583" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500 text-white">
+                    <button id="login-tg-btn" onclick="loginTelegram()" class="w-full bg-blue-600 hover:bg-blue-700 font-bold py-3 rounded-xl transition-all">Access Dashboard</button>
+                </div>
+            </div>
+
+            <!-- Step 2: OTP Verification -->
+            <div id="step-2" class="card p-8 rounded-2xl hidden mt-4">
+                <p class="text-slate-400 mb-6 font-bold text-green-400">OTP Sent! Check your device.</p>
+                <input type="text" id="otp-input" placeholder="Enter 6-digit Code" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-center tracking-[0.5em] font-mono text-xl mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500 text-white" maxlength="6">
+                <button id="verify-otp-btn" onclick="verifyOTP()" class="w-full bg-blue-600 hover:bg-blue-700 font-bold py-3 rounded-xl transition-all">Verify & Login</button>
+                <button onclick="backToStep1()" class="mt-4 text-xs text-slate-500 hover:text-slate-300">Go Back</button>
             </div>
         </div>
     </div>
@@ -299,25 +322,94 @@
     <script>
         let myChart;
         let userData = null;
+        let currentLoginObj = { type: 'email', identifier: '' };
 
-        async function login() {
+        function setLoginType(type) {
+            document.getElementById('type-email').className = type === 'email' ? 'flex-1 py-2 text-sm font-bold bg-blue-600 rounded-lg transition-all' : 'flex-1 py-2 text-sm font-bold bg-slate-800 text-slate-400 rounded-lg transition-all';
+            document.getElementById('type-tg').className = type === 'tg' ? 'flex-1 py-2 text-sm font-bold bg-blue-600 rounded-lg transition-all' : 'flex-1 py-2 text-sm font-bold bg-slate-800 text-slate-400 rounded-lg transition-all';
+            
+            document.getElementById('input-container-email').classList.toggle('hidden', type !== 'email');
+            document.getElementById('input-container-tg').classList.toggle('hidden', type !== 'tg');
+        }
+
+        async function requestOTP() {
+            const input = document.getElementById('identifier-input').value.trim();
+            if (!input) return alert('Enter a valid email or phone number');
+            
+            const btn = document.getElementById('request-otp-btn');
+            btn.innerText = 'Sending...'; btn.disabled = true;
+
+            const isEmail = input.includes('@');
+            currentLoginObj = { type: isEmail ? 'email' : 'phone', identifier: input };
+
+            try {
+                const res = await fetch('/api/auth/request-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(currentLoginObj)
+                });
+                
+                if (res.ok) {
+                    document.getElementById('step-1').classList.add('hidden');
+                    document.getElementById('step-2').classList.remove('hidden');
+                } else {
+                    const data = await res.json();
+                    alert(data.error || 'Failed to send OTP');
+                }
+            } catch (err) {
+                alert('Connection error');
+            }
+            btn.innerText = 'Send OTP Code'; btn.disabled = false;
+        }
+
+        async function verifyOTP() {
+            const code = document.getElementById('otp-input').value.trim();
+            if (code.length < 6) return alert('Enter complete 6-digit code');
+
+            const btn = document.getElementById('verify-otp-btn');
+            btn.innerText = 'Verifying...'; btn.disabled = true;
+
+            try {
+                const res = await fetch('/api/auth/verify-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...currentLoginObj, code })
+                });
+                const data = await res.json();
+                
+                if (res.ok && data.token) {
+                    localStorage.setItem('sessionToken', data.token);
+                    await loadDashboard();
+                } else {
+                    alert(data.error || 'Invalid OTP');
+                }
+            } catch (err) {
+                alert('Connection error');
+            }
+            btn.innerText = 'Verify & Login'; btn.disabled = false;
+        }
+
+        function backToStep1() {
+            document.getElementById('step-2').classList.add('hidden');
+            document.getElementById('step-1').classList.remove('hidden');
+        }
+
+        async function loginTelegram() {
             const id = document.getElementById('telegram-id-input').value.trim();
             if (!id) return alert('Enter your Telegram ID');
             
-            const btn = document.getElementById('login-btn');
-            const originalText = btn.innerText;
-            btn.innerText = 'Loading...';
-            btn.disabled = true;
+            const btn = document.getElementById('login-tg-btn');
+            btn.innerText = 'Loading...'; btn.disabled = true;
 
             localStorage.setItem('telegramId', id);
             await loadDashboard();
             
-            btn.innerText = originalText;
-            btn.disabled = false;
+            btn.innerText = 'Access Dashboard'; btn.disabled = false;
         }
 
         function logout() {
             localStorage.removeItem('telegramId');
+            localStorage.removeItem('sessionToken');
             window.location.reload();
         }
 
@@ -355,11 +447,14 @@
         }
 
         async function loadDashboard() {
-            const id = localStorage.getItem('telegramId');
-            if (!id) return;
+            const tid = localStorage.getItem('telegramId');
+            const token = localStorage.getItem('sessionToken');
+            if (!tid && !token) return;
 
             try {
-                const res = await fetch(`/api/me?telegramId=${id}`);
+                const query = token ? `sessionToken=${token}` : `telegramId=${tid}`;
+                const res = await fetch(`/api/me?${query}`);
+                
                 if (!res.ok) {
                     const errorData = await res.json();
                     logout();
@@ -390,8 +485,9 @@
                 document.getElementById('referral-input').value = referralUrl;
 
                 // Handle Upgrade Links
-                document.getElementById('btn-upgrade-pro').href = `/subscribe/pro?telegramId=${id}&currency=MWK`;
-                document.getElementById('btn-upgrade-vip').href = `/subscribe/vip?telegramId=${id}&currency=MWK`;
+                const params = token ? `?sessionToken=${token}&currency=MWK` : `?telegramId=${tid}&currency=MWK`;
+                document.getElementById('btn-upgrade-pro').href = `/subscribe/pro${params}`;
+                document.getElementById('btn-upgrade-vip').href = `/subscribe/vip${params}`;
 
                 // Handle Admin View
                 if (user.isAdmin) {
@@ -486,8 +582,8 @@
             alert('Referral link copied to clipboard!');
         }
 
-        if (localStorage.getItem('telegramId')) loadDashboard();
-        setInterval(() => { if (localStorage.getItem('telegramId')) fetchSignals(); }, 60000);
+        if (localStorage.getItem('telegramId') || localStorage.getItem('sessionToken')) loadDashboard();
+        setInterval(() => { if (localStorage.getItem('telegramId') || localStorage.getItem('sessionToken')) fetchSignals(); }, 60000);
     </script>
 </body>
 </html>
